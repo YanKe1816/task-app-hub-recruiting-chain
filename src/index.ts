@@ -283,7 +283,11 @@ function extractCandidateAvailability(input: unknown): CandidateAvailabilityOutp
 
   const textValue = (input as { text: unknown }).text;
   if (typeof textValue !== "string") {
-    return errorOutput("invalid_input_type", "The required input text must be a string.");
+    return errorOutput(
+      "invalid_input_type",
+      "The required input text must be a string.",
+      String(textValue),
+    );
   }
 
   const sourceText = textValue;
