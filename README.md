@@ -67,3 +67,4 @@ After deployment, replace `<worker-url>` with the deployed Worker URL:
 - If `/health` does not return `ok`, confirm the Worker is running and the route is not shadowed.
 - If the challenge route returns the local fallback in production, configure `OPENAI_APPS_CHALLENGE`.
 - If MCP calls fail, confirm the request is JSON-RPC 2.0 and targets `/candidate-time-extractor/mcp`.
+- Deployment refresh: 2026-06-02
