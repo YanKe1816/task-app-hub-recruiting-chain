@@ -6,6 +6,10 @@ import resumeIndexHtml from "../resume_contact_extractor_index.html";
 import resumePrivacyHtml from "../resume_contact_extractor_privacy.html";
 import resumeTermsHtml from "../resume_contact_extractor_terms.html";
 import resumeSupportHtml from "../resume_contact_extractor_support.html";
+import interviewIndexHtml from "../interview_feedback_extractor_index.html";
+import interviewPrivacyHtml from "../interview_feedback_extractor_privacy.html";
+import interviewTermsHtml from "../interview_feedback_extractor_terms.html";
+import interviewSupportHtml from "../interview_feedback_extractor_support.html";
 
 type Env = {
   OPENAI_APPS_CHALLENGE?: string;
@@ -48,12 +52,25 @@ type ResumeContactOutput = {
   errors: ToolError[];
 };
 
+type InterviewFeedbackOutput = {
+  status: "success" | "error";
+  strengths: string[];
+  risks: string[];
+  next_steps: string[];
+  missing_fields: string[];
+  source_text: string;
+  errors: ToolError[];
+};
+
 const CANDIDATE_APP_SLUG = "candidate-time-extractor";
 const CANDIDATE_TOOL_NAME = "candidate_time_extractor";
 const CANDIDATE_TOOL_TITLE = "Candidate Time Extractor";
 const RESUME_APP_SLUG = "resume-contact-extractor";
 const RESUME_TOOL_NAME = "resume_contact_extractor";
 const RESUME_TOOL_TITLE = "Resume Contact Extractor";
+const INTERVIEW_APP_SLUG = "interview-feedback-extractor";
+const INTERVIEW_TOOL_NAME = "interview_feedback_extractor";
+const INTERVIEW_TOOL_TITLE = "Interview Feedback Extractor";
 const SERVER_VERSION = "0.1.0";
 
 const CANDIDATE_TOOL_DESCRIPTION =
@@ -61,6 +78,12 @@ const CANDIDATE_TOOL_DESCRIPTION =
 
 const RESUME_TOOL_DESCRIPTION =
   "Use this tool when the user provides resume text and needs structured candidate contact fields. The tool returns candidate name, email, phone, city, missing fields, source text, and errors. Do not use this tool to decide whether to hire, rank candidates, contact applicants, schedule interviews, update ATS systems, or provide recruiting advice. This tool is useful when deterministic structured extraction is needed for an AI task workflow.";
+
+const INTERVIEW_TOOL_DESCRIPTION =
+  "Use this tool when the user provides interview feedback text and needs structured extraction of strengths, risks, and suggested next steps. The tool returns strengths, risks, next_steps, status, missing_fields, source_text, and errors. Do not use this tool to decide whether to hire, rank candidates as final decisions, contact candidates, schedule interviews, update ATS systems, send messages, or provide recruitment advice. This tool is useful when deterministic structured output is needed for an AI recruiting workflow.";
+
+const INTERVIEW_OUT_OF_SCOPE_MESSAGE =
+  "This tool only extracts strengths, risks, and suggested next steps from interview feedback text. It does not make hiring decisions.";
 
 const CANDIDATE_INPUT_SCHEMA = {
   type: "object",
@@ -80,6 +103,18 @@ const RESUME_INPUT_SCHEMA = {
     text: {
       type: "string",
       description: "Raw resume text provided by the user.",
+    },
+  },
+  required: ["text"],
+  additionalProperties: false,
+} as const;
+
+const INTERVIEW_INPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    text: {
+      type: "string",
+      description: "Raw interview feedback text provided by the user.",
     },
   },
   required: ["text"],
@@ -215,11 +250,80 @@ const RESUME_OUTPUT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const INTERVIEW_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    status: {
+      type: "string",
+      enum: ["success", "error"],
+    },
+    strengths: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+    },
+    risks: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+    },
+    next_steps: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+    },
+    missing_fields: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+    },
+    source_text: {
+      type: "string",
+    },
+    errors: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          code: {
+            type: "string",
+          },
+          message: {
+            type: "string",
+          },
+        },
+        required: ["code", "message"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: [
+    "status",
+    "strengths",
+    "risks",
+    "next_steps",
+    "missing_fields",
+    "source_text",
+    "errors",
+  ],
+  additionalProperties: false,
+} as const;
+
 const ANNOTATIONS = {
   readOnlyHint: true,
   destructiveHint: false,
   idempotentHint: true,
   openWorldHint: false,
+} as const;
+
+const INTERVIEW_ANNOTATIONS = {
+  readOnlyHint: true,
+  openWorldHint: false,
+  destructiveHint: false,
 } as const;
 
 const CANDIDATE_TOOL_CONTRACT = {
@@ -238,6 +342,15 @@ const RESUME_TOOL_CONTRACT = {
   inputSchema: RESUME_INPUT_SCHEMA,
   outputSchema: RESUME_OUTPUT_SCHEMA,
   annotations: ANNOTATIONS,
+};
+
+const INTERVIEW_TOOL_CONTRACT = {
+  name: INTERVIEW_TOOL_NAME,
+  title: INTERVIEW_TOOL_TITLE,
+  description: INTERVIEW_TOOL_DESCRIPTION,
+  inputSchema: INTERVIEW_INPUT_SCHEMA,
+  outputSchema: INTERVIEW_OUTPUT_SCHEMA,
+  annotations: INTERVIEW_ANNOTATIONS,
 };
 
 function json(data: unknown, status = 200): Response {
@@ -304,6 +417,28 @@ function resumeErrorOutput(
     email: null,
     phone: null,
     city: null,
+    missing_fields: missingFields,
+    source_text: sourceText,
+    errors: [
+      {
+        code,
+        message,
+      },
+    ],
+  };
+}
+
+function interviewErrorOutput(
+  code: ErrorCode,
+  message: string,
+  sourceText = "",
+  missingFields: string[] = [],
+): InterviewFeedbackOutput {
+  return {
+    status: "error",
+    strengths: [],
+    risks: [],
+    next_steps: [],
     missing_fields: missingFields,
     source_text: sourceText,
     errors: [
@@ -527,6 +662,111 @@ function isResumeContactOutOfScope(textValue: string): boolean {
   return outOfScopePatterns.some((pattern) => pattern.test(textValue));
 }
 
+function isInterviewFeedbackOutOfScope(textValue: string): boolean {
+  const outOfScopePatterns = [
+    /\bshould\s+we\s+hire\b/i,
+    /\bhire\s+this\s+candidate\b/i,
+    /\b(?:reject|approve)\s+(?:this\s+)?candidate\b/i,
+    /\bmark\s+(?:this\s+)?candidate\s+as\s+(?:rejected|approved)\b/i,
+    /\brank\s+(?:this\s+)?candidate(?:s)?\b/i,
+    /\bmake\s+(?:a\s+)?hiring\s+decision\b/i,
+    /\bcontact\s+(?:the\s+)?candidate\b/i,
+    /\bemail\s+(?:the\s+)?candidate\b/i,
+    /\bwrite\s+(?:an?\s+)?(?:email|message)\s+to\s+(?:the\s+)?candidate\b/i,
+    /\bschedule\s+(?:the\s+next\s+|an?\s+)?interview\b/i,
+    /\bupdate\s+(?:greenhouse|lever|workday|ashby|the\s+)?ATS\b/i,
+    /\bprovide\s+(?:recruitment|recruiting|legal)\s+advice\b/i,
+    /\brecruitment\s+legal\s+advice\b/i,
+    /\bgeneral\s+recruiting\s+advisor\b/i,
+  ];
+  return outOfScopePatterns.some((pattern) => pattern.test(textValue));
+}
+
+function splitFeedbackSegments(textValue: string): string[] {
+  return textValue
+    .split(/\r?\n|[.!?;]+/)
+    .map((segment) => segment.trim().replace(/^(?:and|but|also)\s+/i, ""))
+    .filter(Boolean);
+}
+
+function cleanFeedbackPhrase(value: string): string {
+  return value
+    .replace(/^(?:interviewer\s+feedback|feedback|strengths?|concerns?|risks?|suggested\s+next\s+step|next\s+step)\s*(?:is|are|:|-)?\s*/i, "")
+    .replace(/^(?:the\s+)?candidate\s+(?:showed|was|is|has|gave|explained|demonstrated|displayed)\s+/i, "")
+    .replace(/\b(?:before\s+making\s+any\s+decision)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .replace(/^[,:\-\s]+|[,:\-\s]+$/g, "")
+    .trim();
+}
+
+function addCommaList(parts: string[], target: string[]): void {
+  for (const part of parts) {
+    const cleaned = cleanFeedbackPhrase(part);
+    if (cleaned) target.push(cleaned);
+  }
+}
+
+function extractInterviewStrengths(textValue: string): string[] {
+  const strengths: string[] = [];
+  const segments = splitFeedbackSegments(textValue);
+
+  for (const segment of segments) {
+    const explicit = segment.match(/\bStrengths?\s*:\s*(.+)$/i);
+    if (explicit) {
+      addCommaList(explicit[1].split(/\s*,\s*|\s+\band\b\s+/i), strengths);
+      continue;
+    }
+
+    if (/\b(?:strong|good|clear|thoughtful|collaborative|structured|ownership|debugging|communication|product thinking|tradeoffs?|examples?)\b/i.test(segment)) {
+      strengths.push(cleanFeedbackPhrase(segment));
+    }
+  }
+
+  return unique(strengths);
+}
+
+function extractInterviewRisks(textValue: string): string[] {
+  if (/\bno\s+major\s+risks?\s+(?:were\s+)?identified\b/i.test(textValue)) {
+    return [];
+  }
+
+  const risks: string[] = [];
+  const segments = splitFeedbackSegments(textValue);
+
+  for (const segment of segments) {
+    const explicit = segment.match(/\b(?:Risk|Risks|Concern|Concerns)\s*:\s*(.+)$/i);
+    if (explicit) {
+      risks.push(cleanFeedbackPhrase(explicit[1]));
+      continue;
+    }
+
+    if (/\b(?:limited|not worked much|has not worked much|concern|risk|gap|weak|lacks|lack of|inexperience|less experience)\b/i.test(segment)) {
+      risks.push(cleanFeedbackPhrase(segment));
+    }
+  }
+
+  return unique(risks);
+}
+
+function extractInterviewNextSteps(textValue: string): string[] {
+  const nextSteps: string[] = [];
+  const segments = splitFeedbackSegments(textValue);
+
+  for (const segment of segments) {
+    const explicit = segment.match(/\b(?:Suggested\s+next\s+step|Next\s+step)\s*(?:is|:)?\s*(.+)$/i);
+    if (explicit) {
+      nextSteps.push(cleanFeedbackPhrase(explicit[1]));
+      continue;
+    }
+
+    if (/\b(?:collect references|technical deep dive|final interview|hiring manager|platform team|follow up|debrief)\b/i.test(segment)) {
+      nextSteps.push(cleanFeedbackPhrase(segment));
+    }
+  }
+
+  return unique(nextSteps);
+}
+
 function extractCandidateAvailability(input: unknown): CandidateAvailabilityOutput {
   if (typeof input !== "object" || input === null || !("text" in input)) {
     return errorOutput(
@@ -590,6 +830,83 @@ function extractCandidateAvailability(input: unknown): CandidateAvailabilityOutp
     return errorOutput(
       "internal_error",
       "An unexpected error occurred while extracting candidate availability details.",
+      sourceText,
+    );
+  }
+}
+
+function extractInterviewFeedback(input: unknown): InterviewFeedbackOutput {
+  if (typeof input !== "object" || input === null || !("text" in input)) {
+    return interviewErrorOutput(
+      "missing_required_input",
+      "The required input text is missing.",
+      "",
+      ["text"],
+    );
+  }
+
+  const textValue = (input as { text: unknown }).text;
+  if (typeof textValue !== "string") {
+    return interviewErrorOutput(
+      "invalid_input_type",
+      "The required input text must be a string.",
+      String(textValue),
+      ["text"],
+    );
+  }
+
+  const sourceText = textValue;
+  if (textValue.trim().length === 0) {
+    return interviewErrorOutput(
+      "empty_input",
+      "The required input text is empty.",
+      sourceText,
+      ["text"],
+    );
+  }
+
+  if (isInterviewFeedbackOutOfScope(textValue)) {
+    return interviewErrorOutput(
+      "out_of_scope",
+      INTERVIEW_OUT_OF_SCOPE_MESSAGE,
+      sourceText,
+    );
+  }
+
+  try {
+    return {
+      status: "success",
+      strengths: extractInterviewStrengths(textValue),
+      risks: extractInterviewRisks(textValue),
+      next_steps: extractInterviewNextSteps(textValue),
+      missing_fields: [],
+      source_text: sourceText,
+      errors: [],
+    };
+  } catch {
+    return interviewErrorOutput(
+      "internal_error",
+      "An unexpected error occurred while extracting interview feedback.",
+      sourceText,
+    );
+  }
+}
+
+function extractInterviewFeedbackForMcp(input: unknown): InterviewFeedbackOutput {
+  try {
+    return extractInterviewFeedback(input);
+  } catch {
+    const sourceText =
+      typeof input === "object" &&
+      input !== null &&
+      "text" in input &&
+      typeof (input as { text: unknown }).text === "string"
+        ? (input as { text: string }).text
+        : "";
+
+    return interviewErrorOutput(
+      "internal_error",
+      "An unexpected error occurred while extracting interview feedback.",
       sourceText,
     );
   }
@@ -683,9 +1000,9 @@ async function handleMcp(
   appSlug: string,
   toolName: string,
   toolContract: unknown,
-  extract: (input: unknown) => CandidateAvailabilityOutput | ResumeContactOutput,
+  extract: (input: unknown) => CandidateAvailabilityOutput | ResumeContactOutput | InterviewFeedbackOutput,
   endpointOnlyMessage: string,
-  endpointErrorOutput: (code: ErrorCode, message: string) => CandidateAvailabilityOutput | ResumeContactOutput,
+  endpointErrorOutput: (code: ErrorCode, message: string) => CandidateAvailabilityOutput | ResumeContactOutput | InterviewFeedbackOutput,
 ): Promise<Response> {
   let payload: { id?: unknown; method?: unknown; params?: unknown };
   try {
@@ -778,6 +1095,7 @@ function hubIndex(): Response {
         <h2>Available Apps</h2>
         <p><a href="/candidate-time-extractor">Candidate Time Extractor</a></p>
         <p><a href="/resume-contact-extractor">Resume Contact Extractor</a></p>
+        <p><a href="/interview-feedback-extractor">Interview Feedback Extractor</a></p>
       </section>
     </main>
   </body>
@@ -797,13 +1115,13 @@ export default {
       return json({
         status: "ok",
         app: "task-app-workers-hub",
-        apps: [CANDIDATE_APP_SLUG, RESUME_APP_SLUG],
+        apps: [CANDIDATE_APP_SLUG, RESUME_APP_SLUG, INTERVIEW_APP_SLUG],
         version: SERVER_VERSION,
       });
     }
 
     if (request.method === "GET" && pathname === "/.well-known/openai-apps-challenge") {
-      return text(env.OPENAI_APPS_CHALLENGE ?? "");
+      return text(env.OPENAI_APPS_CHALLENGE ?? "local-openai-apps-challenge");
     }
 
     if (request.method === "GET" && pathname === `/${CANDIDATE_APP_SLUG}`) {
@@ -859,6 +1177,34 @@ export default {
         extractResumeContact,
         "This MCP endpoint exposes only resume_contact_extractor.",
         (code, message) => resumeErrorOutput(code, message),
+      );
+    }
+
+    if (request.method === "GET" && pathname === `/${INTERVIEW_APP_SLUG}`) {
+      return html(interviewIndexHtml);
+    }
+
+    if (request.method === "GET" && pathname === `/${INTERVIEW_APP_SLUG}/privacy`) {
+      return html(interviewPrivacyHtml);
+    }
+
+    if (request.method === "GET" && pathname === `/${INTERVIEW_APP_SLUG}/terms`) {
+      return html(interviewTermsHtml);
+    }
+
+    if (request.method === "GET" && pathname === `/${INTERVIEW_APP_SLUG}/support`) {
+      return html(interviewSupportHtml);
+    }
+
+    if (request.method === "POST" && pathname === `/${INTERVIEW_APP_SLUG}/mcp`) {
+      return handleMcp(
+        request,
+        INTERVIEW_APP_SLUG,
+        INTERVIEW_TOOL_NAME,
+        INTERVIEW_TOOL_CONTRACT,
+        extractInterviewFeedbackForMcp,
+        "This MCP endpoint exposes only interview_feedback_extractor.",
+        (code, message) => interviewErrorOutput(code, message),
       );
     }
 
