@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Interview Feedback Extractor</title>
+    <style>
+      body { font-family: Arial, sans-serif; line-height: 1.55; margin: 0; color: #1f2937; background: #f8fafc; }
+      header, main { max-width: 860px; margin: 0 auto; padding: 24px; }
+      nav { color: #64748b; font-weight: 700; }
+      nav a { color: #0f766e; margin: 0 8px; font-weight: 700; text-decoration: none; }
+      nav a:first-child { margin-left: 0; }
+      section { background: #ffffff; border: 1px solid #dbe3ea; border-radius: 8px; margin: 16px 0; padding: 20px; }
+      h1, h2 { color: #111827; }
+      code { background: #eef2f7; padding: 2px 5px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav>
+        <a href="/interview-feedback-extractor">Home</a> |
+        <a href="/interview-feedback-extractor/privacy">Privacy</a> |
+        <a href="/interview-feedback-extractor/terms">Terms</a> |
+        <a href="/interview-feedback-extractor/support">Support</a>
+      </nav>
+      <h1>Interview Feedback Extractor</h1>
+    </header>
+    <main>
+      <section>
+        <h2>What this app does</h2>
+        <p>This app extracts structured interview feedback from raw text into strengths, risks, suggested next steps, missing fields, source text, and errors.</p>
+      </section>
+      <section>
+        <h2>When to use it</h2>
+        <p>Use it when a recruiting workflow needs deterministic structured extraction from interviewer notes or feedback text.</p>
+      </section>
+      <section>
+        <h2>Input</h2>
+        <p>The input is a single text field named <code>text</code> containing raw interview feedback provided by the user.</p>
+      </section>
+      <section>
+        <h2>Output</h2>
+        <p>The output includes <code>status</code>, <code>strengths</code>, <code>risks</code>, <code>next_steps</code>, <code>missing_fields</code>, <code>source_text</code>, and <code>errors</code>.</p>
+      </section>
+      <section>
+        <h2>What this app does not do</h2>
+        <p>It does not make hiring decisions, rank candidates as final decisions, contact candidates, schedule interviews, update ATS systems, send messages, or provide recruitment advice.</p>
+      </section>
+      <section>
+        <h2>Data handling</h2>
+        <p>The app is stateless, read-only, deterministic, and does not use external APIs. It processes only the text supplied in the current request.</p>
+      </section>
+      <section>
+        <h2>Support</h2>
+        <p>For support, email <a href="mailto:sidcraigau@gmail.com">sidcraigau@gmail.com</a> and include the route, request type, and any validation error code when reporting an issue.</p>
+      </section>
+    </main>
+  </body>
+</html>
