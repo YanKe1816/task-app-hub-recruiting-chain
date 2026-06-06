@@ -29,32 +29,44 @@
         <p>Resume Contact Extractor.</p>
       </section>
       <section>
-        <h2>What this app does</h2>
-        <p>It extracts candidate contact details from raw resume text into a deterministic structured format.</p>
+        <h2>Data Collected</h2>
+        <p>Resume Contact Extractor processes only resume text submitted by the user in the current request. The submitted text may contain candidate name, email, phone, city, and other resume content. The app does not collect external data, scrape websites, or fetch additional data.</p>
       </section>
       <section>
-        <h2>When to use it</h2>
-        <p>Use it for read-only recruiting workflow extraction when resume contact fields need to be structured.</p>
+        <h2>Tool Inputs</h2>
+        <p>The tool input field is <code>text</code>: raw resume text provided by the user.</p>
       </section>
       <section>
-        <h2>Input</h2>
-        <p>The app accepts only raw resume text in <code>text</code>.</p>
+        <h2>Tool Outputs</h2>
+        <p>The tool output fields are <code>status</code>, <code>candidate_name</code>, <code>email</code>, <code>phone</code>, <code>city</code>, <code>missing_fields</code>, <code>source_text</code>, and <code>errors</code>.</p>
       </section>
       <section>
-        <h2>Output</h2>
-        <p>The app returns candidate name, email, phone, city, missing fields, source text, and structured errors.</p>
+        <h2>Purpose of Processing</h2>
+        <p>The submitted data is used only to extract contact fields from resume text. The app does not evaluate candidates, rank candidates, make hiring decisions, contact candidates, schedule interviews, send messages, or update ATS or external systems.</p>
       </section>
       <section>
-        <h2>What this app does not do</h2>
-        <p>It does not evaluate candidates, rank candidates, provide hiring advice, contact candidates, schedule interviews, send messages, update ATS systems, or make hiring decisions.</p>
+        <h2>Recipients and Sharing</h2>
+        <p>The app does not sell user data, does not intentionally share submitted data with third-party recipients, does not call external APIs, does not send extracted fields to downstream systems, and does not contact external parties.</p>
       </section>
       <section>
-        <h2>Data handling</h2>
-        <p>The app does not store submitted text, does not call external APIs, does not require authentication, and does not maintain state.</p>
+        <h2>Retention</h2>
+        <p>The app is stateless and does not intentionally store submitted resume text or generated outputs after request processing is complete, aside from transient platform-level handling or logs for security, debugging, abuse prevention, and service operation.</p>
       </section>
       <section>
-        <h2>Support</h2>
-        <p>For privacy or support questions, email <a href="mailto:sidcraigau@gmail.com">sidcraigau@gmail.com</a>. Use the support page for issue-reporting guidance.</p>
+        <h2>User Controls</h2>
+        <p>Users control what they submit, may redact sensitive details before submitting, may choose not to use the app, and can contact support for privacy questions or deletion requests.</p>
+      </section>
+      <section>
+        <h2>Login and Accounts</h2>
+        <p>The app does not require user accounts, authentication, or login credentials.</p>
+      </section>
+      <section>
+        <h2>Read-Only Operation and No Side Effects</h2>
+        <p>The app is read-only and does not modify records, send messages, make decisions, contact external parties, update systems, or perform operational actions.</p>
+      </section>
+      <section>
+        <h2>Contact</h2>
+        <p>For privacy questions or deletion requests, contact <a href="mailto:sidcraigau@gmail.com">sidcraigau@gmail.com</a>.</p>
       </section>
     </main>
   </body>
