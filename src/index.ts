@@ -362,10 +362,11 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-function html(body: string): Response {
+function html(body: string, extraHeaders: Record<string, string> = {}): Response {
   return new Response(body, {
     headers: {
       "content-type": "text/html; charset=utf-8",
+      ...extraHeaders,
     },
   });
 }
@@ -1157,7 +1158,11 @@ export default {
     }
 
     if (request.method === "GET" && pathname === `/${RESUME_APP_SLUG}/privacy`) {
-      return html(resumePrivacyHtml);
+      return html(resumePrivacyHtml, {
+        "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+        pragma: "no-cache",
+        expires: "0",
+      });
     }
 
     if (request.method === "GET" && pathname === `/${RESUME_APP_SLUG}/terms`) {
