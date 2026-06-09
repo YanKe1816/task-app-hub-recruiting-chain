@@ -441,14 +441,37 @@ function interviewErrorOutput(
     risks: [],
     next_steps: [],
     missing_fields: missingFields,
-    source_text: sourceText,
+    source_text: sanitizePersonalIdentifiers(sourceText),
     errors: [
       {
         code,
-        message,
+        message: sanitizePersonalIdentifiers(message),
       },
     ],
   };
+}
+
+function sanitizePersonalIdentifiers(textValue: string): string {
+  return textValue
+    .replace(/\[[^\]\s]+@[^\]\s]+\]\(mailto:[^)]+\)/gi, "[REDACTED_EMAIL]")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[REDACTED_EMAIL]")
+    .replace(/\[[^\]]+\]\((?:https?:\/\/|www\.)[^)]+\)/gi, "[REDACTED_URL]")
+    .replace(/\b(?:https?:\/\/|www\.)\S+/gi, "[REDACTED_URL]")
+    .replace(/\b(?:linkedin\.com|github\.com)\/\S+/gi, "[REDACTED_URL]")
+    .replace(
+      /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b/g,
+      "[REDACTED_PHONE]",
+    )
+    .replace(
+      /\b\d{1,6}\s+[A-Z][A-Za-z0-9.'-]*(?:\s+[A-Z][A-Za-z0-9.'-]*){0,5}\s+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Way|Place|Pl)\b\.?/g,
+      "[REDACTED_LOCATION]",
+    )
+    .replace(/\b((?:based|located|living|lives|resides|from)\s+in\s+)([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3})\b/g, "$1[REDACTED_LOCATION]")
+    .replace(/\b(Candidate|candidate)\s+([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,3})\b/g, "$1 [REDACTED_NAME]")
+    .replace(/\b(hire|reject|approve|contact|email|call)\s+([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,3})\b/g, "$1 [REDACTED_NAME]")
+    .replace(/\b(?:candidate|employee|person|personal|passport|license|licence|ssn)\s+id\s*[:#-]?\s*[A-Z0-9-]{3,}\b/gi, "[REDACTED_IDENTIFIER]")
+    .replace(/\b(?:ssn|passport|license|licence)\s*[:#-]?\s*[A-Z0-9-]{3,}\b/gi, "[REDACTED_IDENTIFIER]")
+    .replace(/@[A-Za-z0-9_-]{3,}\b/g, "[REDACTED_IDENTIFIER]");
 }
 
 function unique(values: string[]): string[] {
@@ -875,13 +898,18 @@ function extractInterviewFeedback(input: unknown): InterviewFeedbackOutput {
   }
 
   try {
+    const sanitizedText = sanitizePersonalIdentifiers(textValue);
+    const strengths = extractInterviewStrengths(sanitizedText).map(sanitizePersonalIdentifiers);
+    const risks = extractInterviewRisks(sanitizedText).map(sanitizePersonalIdentifiers);
+    const nextSteps = extractInterviewNextSteps(sanitizedText).map(sanitizePersonalIdentifiers);
+
     return {
       status: "success",
-      strengths: extractInterviewStrengths(textValue),
-      risks: extractInterviewRisks(textValue),
-      next_steps: extractInterviewNextSteps(textValue),
+      strengths,
+      risks,
+      next_steps: nextSteps,
       missing_fields: [],
-      source_text: sourceText,
+      source_text: sanitizedText,
       errors: [],
     };
   } catch {
