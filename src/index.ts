@@ -751,7 +751,7 @@ function splitStrengthFeedbackItem(value: string): string[] {
   const parts = value.split(/\s+\band\b\s+/i).map((part) => part.trim()).filter(Boolean);
   if (
     parts.length > 1 &&
-    parts.every((part) => /\b(?:strong|good|clear|thoughtful|collaborative|structured|ownership|debugging|communication|product thinking|tradeoffs?|examples?)\b/i.test(part))
+    parts.every((part) => /\b(?:strong|good|clear|concise|thoughtful|collaborative|structured|ownership|debugging|communication|product thinking|tradeoffs?|examples?)\b/i.test(part))
   ) {
     return parts;
   }
@@ -773,6 +773,7 @@ function cleanupExtractedFeedbackItems(
     for (const part of parts) {
       const normalized = capitalizeFeedbackItem(
         removeFeedbackIdentityFragments(part)
+          .replace(/^(?:showed|demonstrated|displayed|gave|explained)\s+/i, "")
           .replace(/\s+/g, " ")
           .replace(/^[,:\-\s]+|[,:\-\s]+$/g, "")
           .trim(),
@@ -805,7 +806,7 @@ function extractInterviewStrengths(textValue: string): string[] {
       continue;
     }
 
-    if (/\b(?:strong|good|clear|thoughtful|collaborative|structured|ownership|debugging|communication|product thinking|tradeoffs?|examples?)\b/i.test(segment)) {
+    if (/\b(?:strong|good|clear|concise|thoughtful|collaborative|structured|ownership|debugging|communication|product thinking|tradeoffs?|examples?)\b/i.test(segment)) {
       strengths.push(cleanFeedbackPhrase(segment));
     }
   }
@@ -836,11 +837,19 @@ function extractInterviewRisks(textValue: string): string[] {
   return unique(risks);
 }
 
+function hasNegatedNextStepStatement(textValue: string): boolean {
+  return /\bno\s+(?:(?:suggested\s+)?next\s+step|follow-up\s+(?:step|action))\s+was\s+(?:provided|included|given)\b/i.test(textValue);
+}
+
 function extractInterviewNextSteps(textValue: string): string[] {
   const nextSteps: string[] = [];
   const segments = splitFeedbackSegments(textValue);
 
   for (const segment of segments) {
+    if (hasNegatedNextStepStatement(segment)) {
+      continue;
+    }
+
     const explicit = segment.match(/\b(?:Suggested\s+next\s+step|Next\s+step)\s*(?:is|:)?\s*(.+)$/i);
     if (explicit) {
       nextSteps.push(cleanFeedbackPhrase(explicit[1]));
@@ -966,13 +975,14 @@ function extractInterviewFeedback(input: unknown): InterviewFeedbackOutput {
     const strengths = cleanupExtractedFeedbackItems(extractInterviewStrengths(sanitizedText), "strengths");
     const risks = cleanupExtractedFeedbackItems(extractInterviewRisks(sanitizedText), "risks");
     const nextSteps = cleanupExtractedFeedbackItems(extractInterviewNextSteps(sanitizedText), "next_steps");
+    const missingFields = hasNegatedNextStepStatement(sanitizedText) && nextSteps.length === 0 ? ["next_steps"] : [];
 
     return {
       status: "success",
       strengths,
       risks,
       next_steps: nextSteps,
-      missing_fields: [],
+      missing_fields: missingFields,
       source_text: sanitizedText,
       errors: [],
     };
