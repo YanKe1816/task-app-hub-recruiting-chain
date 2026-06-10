@@ -723,6 +723,70 @@ function cleanFeedbackPhrase(value: string): string {
     .trim();
 }
 
+function capitalizeFeedbackItem(value: string): string {
+  return value.length > 0 ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+
+function removeFeedbackIdentityFragments(value: string): string {
+  return value
+    .replace(
+      /^Candidate\s+(?:(?:\[REDACTED_(?:NAME|EMAIL|PHONE|URL|LOCATION|IDENTIFIER)\])|phone|[,:\-\s])+\s*(?:showed|demonstrated|displayed|has|was|gave|explained)\s+/i,
+      "",
+    )
+    .replace(
+      /^Candidate\s+(?:(?:\[REDACTED_(?:NAME|EMAIL|PHONE|URL|LOCATION|IDENTIFIER)\])|phone|[,:\-\s])+/i,
+      "",
+    )
+    .replace(
+      /(?:^|[,:\-\s])(?:phone\s+)?\[REDACTED_(?:NAME|EMAIL|PHONE|URL|LOCATION|IDENTIFIER)\](?=[,:\-\s]|$)/gi,
+      " ",
+    )
+    .replace(/\bphone\b\s*[,:\-]*/gi, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[,:\-\s]+|[,:\-\s]+$/g, "")
+    .trim();
+}
+
+function splitStrengthFeedbackItem(value: string): string[] {
+  const parts = value.split(/\s+\band\b\s+/i).map((part) => part.trim()).filter(Boolean);
+  if (
+    parts.length > 1 &&
+    parts.every((part) => /\b(?:strong|good|clear|thoughtful|collaborative|structured|ownership|debugging|communication|product thinking|tradeoffs?|examples?)\b/i.test(part))
+  ) {
+    return parts;
+  }
+
+  return [value];
+}
+
+function cleanupExtractedFeedbackItems(
+  values: string[],
+  kind: "strengths" | "risks" | "next_steps",
+): string[] {
+  const cleanedValues: string[] = [];
+
+  for (const value of values) {
+    const sanitized = sanitizePersonalIdentifiers(value);
+    const cleaned = removeFeedbackIdentityFragments(sanitized);
+    const parts = kind === "strengths" ? splitStrengthFeedbackItem(cleaned) : [cleaned];
+
+    for (const part of parts) {
+      const normalized = capitalizeFeedbackItem(
+        removeFeedbackIdentityFragments(part)
+          .replace(/\s+/g, " ")
+          .replace(/^[,:\-\s]+|[,:\-\s]+$/g, "")
+          .trim(),
+      );
+
+      if (normalized && !/\[REDACTED_(?:NAME|EMAIL|PHONE|URL|LOCATION|IDENTIFIER)\]/.test(normalized)) {
+        cleanedValues.push(normalized);
+      }
+    }
+  }
+
+  return unique(cleanedValues);
+}
+
 function addCommaList(parts: string[], target: string[]): void {
   for (const part of parts) {
     const cleaned = cleanFeedbackPhrase(part);
@@ -899,9 +963,9 @@ function extractInterviewFeedback(input: unknown): InterviewFeedbackOutput {
 
   try {
     const sanitizedText = sanitizePersonalIdentifiers(textValue);
-    const strengths = extractInterviewStrengths(sanitizedText).map(sanitizePersonalIdentifiers);
-    const risks = extractInterviewRisks(sanitizedText).map(sanitizePersonalIdentifiers);
-    const nextSteps = extractInterviewNextSteps(sanitizedText).map(sanitizePersonalIdentifiers);
+    const strengths = cleanupExtractedFeedbackItems(extractInterviewStrengths(sanitizedText), "strengths");
+    const risks = cleanupExtractedFeedbackItems(extractInterviewRisks(sanitizedText), "risks");
+    const nextSteps = cleanupExtractedFeedbackItems(extractInterviewNextSteps(sanitizedText), "next_steps");
 
     return {
       status: "success",
