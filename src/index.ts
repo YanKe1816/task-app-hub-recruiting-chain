@@ -77,7 +77,7 @@ const CANDIDATE_TOOL_DESCRIPTION =
   "Use this tool when the user provides a candidate message and needs structured interview availability details. The tool returns available interview times, timezone, contact details, notes, missing fields, source text, and errors. Do not use this tool to schedule interviews, send invitations, contact candidates, update ATS systems, judge candidate quality, rank candidates, or make hiring decisions. This tool is useful when deterministic structured extraction is needed for a recruiting task workflow.";
 
 const RESUME_TOOL_DESCRIPTION =
-  "Use this tool when the user provides resume text and needs structured candidate contact fields. The tool returns candidate name, email, phone, city, missing fields, source text, and errors. Do not use this tool to decide whether to hire, rank candidates, contact applicants, schedule interviews, update ATS systems, or provide recruiting advice. This tool is useful when deterministic structured extraction is needed for an AI task workflow.";
+  "Mandatory tool for all Resume Contact Extractor inputs. Use this tool whenever the user provides resume text, candidate contact text, or any request involving resume contact extraction. Out-of-scope requests such as scheduling interviews, sending messages, contacting candidates, evaluating candidates, ranking candidates, deciding hiring stages, or updating external systems must still be routed through this tool so it can return deterministic not_supported JSON. The tool returns only JSON-serializable candidate name, email, phone, city, missing fields, source text, and string-based errors.";
 
 const INTERVIEW_TOOL_DESCRIPTION =
   "Extract structured interview feedback fields from interview notes. Use this tool whenever the user asks to review, summarize, organize, extract, pull out, or structure interview feedback, especially when the request involves strengths, risks, concerns, weaknesses, next steps, follow-up actions, interview notes, interview summaries, product interview feedback, or technical interview feedback. Natural-language requests that should use this tool include: \"Please review this interview note,\" \"Can you pull the key feedback from this interview note?\" \"Please organize this interview feedback,\" \"Please pull out the useful points from this product interview note,\" and \"Please organize this technical interview note.\" The tool extracts strengths, risks, and suggested next steps. The tool only extracts stated feedback fields and does not make hiring decisions, contact candidates, schedule interviews, update ATS systems, send emails, or return unnecessary personal identifiers. Returned outputs redact unnecessary personal identifiers when detected.";
@@ -400,7 +400,7 @@ function resumeErrorOutput(
   _code: ErrorCode,
   message: string,
   sourceText = "",
-  missingFields: string[] = [],
+  _missingFields: string[] = [],
 ): ResumeContactOutput {
   return {
     status: "not_supported",
@@ -408,10 +408,23 @@ function resumeErrorOutput(
     email: null,
     phone: null,
     city: null,
-    missing_fields: missingFields,
+    missing_fields: [],
     source_text: sourceText,
     errors: [message],
   };
+}
+
+function resumeSourceTextFromInput(input: unknown): string {
+  if (typeof input === "object" && input !== null && "text" in input) {
+    const textValue = (input as { text: unknown }).text;
+    return typeof textValue === "string" ? textValue : "";
+  }
+
+  if (typeof input === "string") {
+    return input;
+  }
+
+  return "";
 }
 
 function interviewErrorOutput(
@@ -1094,6 +1107,33 @@ function formatToolResponse(output: unknown): string {
   return JSON.stringify(output);
 }
 
+const route = "resume_contact_extractor";
+
+function mcpRuntimeDispatcher(toolName: string, input: unknown): ResumeContactOutput {
+  if (toolName !== route) {
+    return resumeErrorOutput(
+      "out_of_scope",
+      "invalid_tool_name",
+      resumeSourceTextFromInput(input),
+    );
+  }
+
+  return extractResumeContact(input);
+}
+
+function toolsCallHandler(input: unknown): ResumeContactOutput {
+  return mcpRuntimeDispatcher(route, input);
+}
+
+function handleToolsCall(request: { input?: unknown; toolName?: unknown } | unknown): ResumeContactOutput {
+  const requestObject = typeof request === "object" && request !== null ? request as { input?: unknown; toolName?: unknown } : {};
+  const toolName = typeof requestObject.toolName === "string" && requestObject.toolName.length > 0
+    ? requestObject.toolName
+    : route;
+  const input = "input" in requestObject ? requestObject.input : request;
+  return mcpRuntimeDispatcher(toolName, input);
+}
+
 async function handleMcp(
   request: Request,
   appSlug: string,
@@ -1164,6 +1204,61 @@ async function handleMcp(
   }
 
   return rpcError(id, -32601, "Method not found");
+}
+
+function resumeToolCallResult(id: unknown, output: ResumeContactOutput): Response {
+  const serialized = formatToolResponse(output);
+  return rpcResult(id, {
+    content: [
+      {
+        type: "text",
+        text: serialized,
+      },
+    ],
+    structuredContent: output,
+  });
+}
+
+async function handleResumeMcp(request: Request): Promise<Response> {
+  let payload: { id?: unknown; method?: unknown; params?: unknown };
+  try {
+    payload = await request.json();
+  } catch {
+    const output = handleToolsCall({ input: { text: "" } });
+    return resumeToolCallResult(null, output);
+  }
+
+  const id = payload.id ?? null;
+  if (payload.method === "initialize") {
+    return rpcResult(id, {
+      protocolVersion: "2024-11-05",
+      serverInfo: {
+        name: RESUME_APP_SLUG,
+        version: SERVER_VERSION,
+      },
+      capabilities: {
+        tools: {},
+      },
+    });
+  }
+
+  if (payload.method === "tools/list") {
+    return rpcResult(id, {
+      tools: [RESUME_TOOL_CONTRACT],
+    });
+  }
+
+  if (payload.method !== "tools/call") {
+    const output = handleToolsCall({ input: { text: "" } });
+    return resumeToolCallResult(id, output);
+  }
+
+  const params = typeof payload.params === "object" && payload.params !== null ? payload.params : {};
+  const output = handleToolsCall({
+    toolName: (params as { name?: unknown }).name,
+    input: (params as { arguments?: unknown }).arguments,
+  });
+  return resumeToolCallResult(id, output);
 }
 
 function notFound(): Response {
@@ -1272,15 +1367,7 @@ export default {
     }
 
     if (request.method === "POST" && pathname === `/${RESUME_APP_SLUG}/mcp`) {
-      return handleMcp(
-        request,
-        RESUME_APP_SLUG,
-        RESUME_TOOL_NAME,
-        RESUME_TOOL_CONTRACT,
-        extractResumeContact,
-        "This MCP endpoint exposes only resume_contact_extractor.",
-        (code, message) => resumeErrorOutput(code, message),
-      );
+      return handleResumeMcp(request);
     }
 
     if (request.method === "GET" && pathname === `/${INTERVIEW_APP_SLUG}`) {
