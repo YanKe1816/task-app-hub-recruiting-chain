@@ -42,14 +42,14 @@ type CandidateAvailabilityOutput = {
 };
 
 type ResumeContactOutput = {
-  status: "success" | "error";
+  status: "success" | "not_supported";
   candidate_name: string | null;
   email: string | null;
   phone: string | null;
   city: string | null;
   missing_fields: string[];
   source_text: string;
-  errors: ToolError[];
+  errors: string[];
 };
 
 type InterviewFeedbackOutput = {
@@ -197,7 +197,7 @@ const RESUME_OUTPUT_SCHEMA = {
   properties: {
     status: {
       type: "string",
-      enum: ["success", "error"],
+      enum: ["success", "not_supported"],
     },
     candidate_name: {
       type: ["string", "null"],
@@ -223,17 +223,7 @@ const RESUME_OUTPUT_SCHEMA = {
     errors: {
       type: "array",
       items: {
-        type: "object",
-        properties: {
-          code: {
-            type: "string",
-          },
-          message: {
-            type: "string",
-          },
-        },
-        required: ["code", "message"],
-        additionalProperties: false,
+        type: "string",
       },
     },
   },
@@ -407,25 +397,20 @@ function errorOutput(
 }
 
 function resumeErrorOutput(
-  code: ErrorCode,
+  _code: ErrorCode,
   message: string,
   sourceText = "",
   missingFields: string[] = [],
 ): ResumeContactOutput {
   return {
-    status: "error",
+    status: "not_supported",
     candidate_name: null,
     email: null,
     phone: null,
     city: null,
     missing_fields: missingFields,
     source_text: sourceText,
-    errors: [
-      {
-        code,
-        message,
-      },
-    ],
+    errors: [message],
   };
 }
 
@@ -657,8 +642,11 @@ function isOutOfScope(textValue: string): boolean {
   const outOfScopePatterns = [
     /\bshould\s+we\s+hire\b/i,
     /\bhire\s+this\s+candidate\b/i,
+    /\bevaluate\s+(?:this\s+)?candidate\b/i,
     /\brank\s+(?:this\s+)?candidate\b/i,
     /\bjudge\s+(?:this\s+)?candidate\b/i,
+    /\bdecide\s+(?:whether|if)\s+(?:this\s+)?candidate\b/i,
+    /\bmove\s+(?:this\s+)?candidate\s+to\s+(?:the\s+)?next\s+(?:interview\s+)?stage\b/i,
     /\bmake\s+(?:a\s+)?hiring\s+decision\b/i,
     /\bschedule\s+(?:an?\s+)?interview\b/i,
     /\bsend\s+(?:the\s+candidate\s+)?(?:a\s+)?(?:calendar\s+)?invite\b/i,
@@ -673,8 +661,12 @@ function isResumeContactOutOfScope(textValue: string): boolean {
   const outOfScopePatterns = [
     /\bshould\s+we\s+hire\b/i,
     /\bhire\s+this\s+candidate\b/i,
+    /\bevaluate\b/i,
     /\brank\s+(?:this\s+)?candidate\b/i,
     /\bjudge\s+(?:this\s+)?candidate\b/i,
+    /\bdecide\s+(?:whether|if)\b/i,
+    /\binterview\s+stage\b/i,
+    /\bnext\s+(?:interview\s+)?stage\b/i,
     /\bmake\s+(?:a\s+)?hiring\s+decision\b/i,
     /\bschedule\s+(?:an?\s+)?interview\b/i,
     /\bsend\s+(?:the\s+candidate\s+)?(?:a\s+)?(?:calendar\s+)?invite\b/i,
@@ -1098,6 +1090,10 @@ function rpcError(id: unknown, code: number, message: string): Response {
   });
 }
 
+function formatToolResponse(output: unknown): string {
+  return JSON.stringify(output);
+}
+
 async function handleMcp(
   request: Request,
   appSlug: string,
@@ -1148,7 +1144,7 @@ async function handleMcp(
         content: [
           {
             type: "text",
-            text: JSON.stringify(output),
+            text: formatToolResponse(output),
           },
         ],
         structuredContent: output,
@@ -1160,7 +1156,7 @@ async function handleMcp(
       content: [
         {
           type: "text",
-          text: JSON.stringify(output),
+          text: formatToolResponse(output),
         },
       ],
       structuredContent: output,
